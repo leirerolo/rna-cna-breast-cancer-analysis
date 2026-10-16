@@ -1,0 +1,16 @@
+#Data too heavy for GitHub, so each one should download it
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+#Virtual environment
+venv/
+
+#Python
+__pycache__/
+*.pyc
+.env
+
+#System
+.DS_Store
