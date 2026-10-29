@@ -4,8 +4,10 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
-#Virtual environment
+#Virtual environments of the fourth of us
 venv/
+.venv/
+.ipynb_checkpoints/
 
 #Python
 __pycache__/
