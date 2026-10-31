@@ -100,6 +100,7 @@ clinical = pat.loc[common].join(sample, how="left", rsuffix="_sample")
  
 print("\nSubtypes in the intersection:")
 print(clinical["SUBTYPE"].value_counts())
+
 print("\nRNA form:", rna.shape, "| CNA log2:", cna_log2.shape,
       "| CNA disc:", cna_disc.shape)
 print("NaN in RNA:", int(rna.isna().sum().sum()),
