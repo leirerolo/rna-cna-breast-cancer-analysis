@@ -73,12 +73,11 @@ print(f"Clinical samples: {n_sample} | after removing repeated patients: {len(sa
 
 
 #exploration of the subtypes registered in the source file
-pat = pd.read_csv("data/raw/brca_tcga_pan_can_atlas_2018/data_clinical_patient.txt", sep="\t", comment="#")
 print("\nSUBTYPE values in the file:")
 print(pat["SUBTYPE"].value_counts(dropna=False))
 
 #we now list the observed subtypes 
-SUBTYPES = ["BRCA_LumA", "BRCA_LumB", "BRCA_Basal", "BRCA_Her2", "BRCA_Normal"]
+SUBTYPES = ["BRCA_LumA", "BRCA_LumB", "BRCA_Basal", "BRCA_Her2"]
 
 left = [s for s in SUBTYPES if s not in set(pat["SUBTYPE"].dropna())]
 if left:
