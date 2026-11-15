@@ -7,13 +7,17 @@ them in .parquet files rather than CSV
 """
 from pathlib import Path
 import pandas as pd
-
+# =====================================================================================================
+# PATH DECLARATION
+#======================================================================================================
 ROOT = Path(__file__).resolve().parents[1] #folder of the repository, with "scripts" folder inside
 #we build the paths to the original and the processed data
 RAW = ROOT / "data" / "raw" / "brca_tcga_pan_can_atlas_2018"
 OUT = ROOT / "data" / "processed"
 OUT.mkdir(parents=True, exist_ok=True) #create an output folder if it doesn't exist
-
+# =====================================================================================================
+# FUNCTION DEFINITION
+#======================================================================================================
 
 def read_gene_matrix(name):
     #the file has genes in rows and samples in columns
@@ -36,14 +40,10 @@ def read_gene_matrix(name):
 
     df = df.set_index("Hugo_Symbol")
     #we keep only sample columns (format: TCGA-XX-XXXX-01)
-    sample_cols = [c for c in df.columns if str(c).startswith("TCGA-")]
+    sample_cols = [c for c in df.columns if c.startswith("TCGA-")]
     df = df[sample_cols]
 
-    #ID of the sample --> ID of the patient (first 12 characters)
-    df.columns = [c[:12] for c in df.columns]
-    df = df.loc[:, ~df.columns.duplicated()] #in case a patient has 2 samples
-    
-    return df.T.astype(float) #this returns patients x genes
+    return df.T.astype(float).rename_axis("SAMPLE_ID") # rename the index
 
 
 def read_clinical(name):
@@ -54,6 +54,9 @@ def read_clinical(name):
     #as there are 4 lines of metadata with # after the normal header:
     return pd.read_csv(path, sep="\t", comment="#")
 
+# =====================================================================================================
+# DATA LOADING PROCESS
+#======================================================================================================
 print("\nReading RNA...")
 rna = read_gene_matrix("data_mrna_seq_v2_rsem.txt")
 print("\nReading CNA log2...")
@@ -65,14 +68,14 @@ print("\n--------------------------------------------------")
 
 print("\nReading clinical...")
 pat = read_clinical("data_clinical_patient.txt").set_index("PATIENT_ID")
-sample = read_clinical("data_clinical_sample.txt")
-sample["PATIENT_ID"] = sample["PATIENT_ID"].astype(str)
-n_sample = len(sample)
-sample = sample.drop_duplicates(subset="PATIENT_ID").set_index("PATIENT_ID")
-print(f"Clinical samples: {n_sample} | after removing repeated patients: {len(sample)}")
+sample = read_clinical("data_clinical_sample.txt").set_index("SAMPLE_ID")
+if not sample.index.is_unique:
+    raise ValueError("Repeated SAMPLE_ID in sample clinical data")
 
+# =====================================================================================================
+#EXPLORATION OF THE SUBTYPES REGISTERED IN THE SOURCE FILE
+#======================================================================================================
 
-#exploration of the subtypes registered in the source file
 print("\nSUBTYPE values in the file:")
 print(pat["SUBTYPE"].value_counts(dropna=False))
 
@@ -86,17 +89,32 @@ if left:
 pat = pat[pat["SUBTYPE"].isin(SUBTYPES)]
 
 
-#INTERSECTION: RNA, CNA, both and the valid subtype
-common = sorted(set(rna.index) & set(cna_log2.index)
-                & set(cna_disc.index) & set(pat.index))
-print("\n--------------------------------------------------------------------------")
-print(f"\nPatients in the intersection: {len(common)} (expected: 945)")
-#explanation on "expected: 945" -> the sum of the observed subtype counts (substracting the NaNs and BRCA_Normal)
+##INTERSECTION: RNA, CNA, both and the valid subtype
+#common = sorted(set(rna.index) & set(cna_log2.index)
+#                & set(cna_disc.index) & set(pat.index))
+#print("\n--------------------------------------------------------------------------")
+#print(f"\nPatients in the intersection: {len(common)} (expected: 945)")
+##explanation on "expected: 945" -> the sum of the observed subtype counts (substracting the NaNs and BRCA_Normal)
+#
+#rna = rna.loc[common]
+#cna_log2 = cna_log2.loc[common]
+#cna_disc = cna_disc.loc[common]
+#clinical = pat.loc[common].join(sample, how="left", rsuffix="_sample")
+clinical = sample.join(
+    pat, on="PATIENT_ID", how="inner", validate="many_to_one"
+)
+
+common = sorted(
+    set(rna.index) & set(cna_log2.index) & set(cna_disc.index)
+    & set(clinical.index)
+)
 
 rna = rna.loc[common]
 cna_log2 = cna_log2.loc[common]
 cna_disc = cna_disc.loc[common]
-clinical = pat.loc[common].join(sample, how="left", rsuffix="_sample")
+clinical = clinical.loc[common]
+
+print(f"Samples in the intersection: {len(common)}")
  
 print("\nSubtypes in the intersection:")
 print(clinical["SUBTYPE"].value_counts())
@@ -107,9 +125,13 @@ print("NaN in RNA:", int(rna.isna().sum().sum()),
       "| CNA log2:", int(cna_log2.isna().sum().sum()),
       "| CNA disc:", int(cna_disc.isna().sum().sum()))
  
+#==============================================================================================================
 #saving (parquet needs pyarrow, so pip install pyarrow)
+#==============================================================================================================
 rna.to_parquet(OUT / "rna_raw.parquet")
 cna_log2.to_parquet(OUT / "cna_log2_raw.parquet")
 cna_disc.to_parquet(OUT / "cna_disc_raw.parquet")
 clinical.to_csv(OUT / "clinical_945.csv")
 print(f"\nStored in {OUT}")
+
+#note that we use parquet due to the size of our dataa, we have 945 rows and 25087 columns

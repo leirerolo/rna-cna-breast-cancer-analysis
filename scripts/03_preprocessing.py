@@ -40,13 +40,16 @@ THRESHOLD_VAR = 0.01 #CNA log2: we delete genes with variance <=0.1 in train
 #pero si decidimos otra cosa solo sería cambiar un par de cosas
 #en esta estructura
 
-#--------- RNA: log2(x+1)
+#--------- RNA: log2(x+1) + filtro de ceros
 assert not rna.isna().any().any(), "There is NaN in RNA"
 assert (rna.values >= 0).all(), "RNA with negative values"
-rna = np.log2(rna + 1)
+rna_log2 = np.log2(rna + 1)
 
-prop_zeros = (rna.loc[train_ids] == 0).mean()
-rna = rna[prop_zeros[prop_zeros < THRESHOLD_ZEROS].index]
+zero_frac = (rna.loc[train_ids] == 0).mean()
+
+#aplicar el filtro
+rna_log2 = rna_log2[zero_frac[zero_frac < THRESHOLD_ZEROS].index]
+
 
 
 #---------- CNA discrete: almost constant gen = a value that dominates in train
