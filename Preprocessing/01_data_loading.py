@@ -7,6 +7,7 @@ them in .parquet files rather than CSV
 """
 from pathlib import Path
 import pandas as pd
+
 # =====================================================================================================
 # PATH DECLARATION
 #======================================================================================================
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1] #folder of the repository, with "scri
 RAW = ROOT / "data" / "raw" / "brca_tcga_pan_can_atlas_2018"
 OUT = ROOT / "data" / "processed"
 OUT.mkdir(parents=True, exist_ok=True) #create an output folder if it doesn't exist
+
 # =====================================================================================================
 # FUNCTION DEFINITION
 #======================================================================================================
@@ -134,4 +136,4 @@ cna_disc.to_parquet(OUT / "cna_disc_raw.parquet")
 clinical.to_csv(OUT / "clinical_945.csv")
 print(f"\nStored in {OUT}")
 
-#note that we use parquet due to the size of our dataa, we have 945 rows and 25087 columns
+#note that we use parquet due to the size of our data, we have 945 rows and 25087 columns

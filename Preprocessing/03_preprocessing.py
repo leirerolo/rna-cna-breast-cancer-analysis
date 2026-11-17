@@ -1,11 +1,5 @@
 """
 SCRIPT 03: preprocessing
-HAY QUE DECIDIR ESTO!!!!!!!
-lo que me sugiere la IA es esto:
-- RNA: log2(x+1) y filtro de genes casi siempre a cero (calculado SOLO con train)
-- CNA: filtro de genes casi constantes (calculado SOLO con train)
-y luego me dice que el escalado y la selección de genes van dentro del Pipeline de los modelos
-
 We will store this in .parquet files: 
 filtered_rna, filtered_cna_disc, filtered_cna_log2
 """

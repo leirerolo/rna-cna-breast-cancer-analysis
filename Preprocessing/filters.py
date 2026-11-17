@@ -1,5 +1,5 @@
 #======================================================================
-#functions for removing statistically unsignificant genes
+#functions for removing almost constant genes
 #======================================================================
 
 import numpy as np
