@@ -17,6 +17,7 @@ Outputs in results/ folder
 """
 
 from pathlib import Path
+import sys
 import numpy as np
 import optuna
 import pandas as pd
@@ -29,7 +30,10 @@ from sklearn.naive_bayes import CategoricalNB, GaussianNB
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 
-from filters import ModalFrequencyFilter, ZeroFractionFilter  # scripts/filters.py
+#we must import filters.py from the project
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT / "Preprocessing"))
+from filters import ModalFrequencyFilter, ZeroFractionFilter
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -37,12 +41,96 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 # ==================================================================================
 # PATHS AND SETTINGS
 # ==================================================================================
-ROOT = Path(__file__).resolve().parents[1]
 P = ROOT / "data" / "processed"
 RESULTS = ROOT / "results"
 RESULTS.mkdir(exist_ok=True)
 
 SEED = 42
-N_FOLDS = 5
-N_TRIALS = 30                              # Optuna trials per scenario
-UNIFORM_PRIORS = [0.25, 0.25, 0.25, 0.25]  # 4 classes (alphabetical order)
+N_FOLDS = 5 #we use 5-fold stratified cross-validation
+N_TRIALS = 30 #number of trials optuna will perform to look for the best hyperparameters
+#we set same initial probabilities for the 4 classes 
+#priors = probability that a sample belongs to a class before analyzing its characteristics
+UNIFORM_PRIORS = [0.25, 0.25, 0.25, 0.25]
+
+
+# ==================================================================================
+# DATA LOADING --> rows = samples, the split is by patient
+# ==================================================================================
+clinical = pd.read_csv(P / "clinical_945.csv", 
+                       usecols=["SAMPLE_ID", "PATIENT_ID", "SUBTYPE"], 
+                       index_col="SAMPLE_ID")
+split = pd.read_csv(P / "patient_split.csv").set_index("PATIENT_ID")["split"]
+
+rna = pd.read_parquet(P/ "rna_log2.parquet")
+cna_disc = pd.read_parquet(P / "cna_disc_raw.parquet")
+
+#check if the samples match
+for name, df in [("RNA", rna), ("CNA discrete", cna_disc)]:
+    assert df.index.equals(clinical.index), f"{name}: samples differ from clinical table"
+
+#check if there are NaNs in cna, because in that case ModalFrequencyFilter would fail
+assert not cna_disc.isna().any().any(), "CNA discrete has NaN"
+#check if cna discrete contains values -2, -1, 0, 1 and 2
+assert set(np.unique(cna_disc.to_numpy())) <= {-2, -1, 0, 1, 2}, "Unexpected CNA discrete values"
+
+
+#we identify the training samples with their patient id
+is_train = clinical["PATIENT_ID"].map(split).eq("train").to_numpy()
+
+#separate labels: y_train = labels of train samples, y_t
+y = clinical["SUBTYPE"] #y = subtype of each sample
+y_train, y_test = y[is_train], y[~is_train] #y_train = labels of train samples, y_test = same for test samples
+print(f"Train: {is_train.sum()} | Test: {(~is_train).sum()}")
+
+#RNA + CNA: we give the columns a prefix so they don't collide
+#and combine both dfs horizontally, so that we add cna columns to those of rna
+#this creates a third dataset dat contains both
+rna_cna = pd.concat([
+    rna.add_prefix("RNA_"), 
+    cna_disc.add_prefix("CNA_")], 
+    axis=1)
+
+
+# =================================================================================
+# SEARCH SPACES: 
+# defining hyperparameters search space that optuna will use 
+# for each naive bayes type
+# ==================================================================================
+
+#define hyperparameters that optuna can try when we use GaussianNB
+def suggest_gaussian(trial):
+    #control the stability: min value 1e-9 and max 1e-1 (0.1)
+    #this allows to explore values of different order of magnitude.
+    var_smoothing = trial.suggest_float("var_smoothing", 1e-9, 1e-1, log=True)
+
+    #choose between 2 possibilities (previously mentioned)
+    priors = trial.suggest_categorical("priors", ["empirical", "uniform"])
+
+    #return the selected hyperparams (with prefix nb__ that means belonging to step nb in the pipeline)
+    return {
+        "nb__var_smoothing": var_smoothing,
+        #if optuna selects empirical, it returns none, so gaussianNB calculates the a priori probabilities from data
+        "nb__priors": None if priors == "empirical" else UNIFORM_PRIORS,
+    }
+
+
+#define for categoricalNB, used for CNA discrete
+def suggest_categorical(trial):
+    #for Laplace smoothing
+    alpha = trial.suggest_float("alpha", 0.01, 5.0, log=True)
+
+    #how to calculate class probabilities:
+    #T -> with observed freqs of each class in training
+    #F -> same prob to all classes
+    fit_prior = trial.suggest_categorical("fit_prior", [True, False])
+
+    return {
+        "nb__alpha": alpha,
+        "nb__fit_prior": fit_prior
+    }
+
+
+#transform the cna discrete values so they are compatible with CategoricalNB
+def shift_cna(X):
+    #categoricalNB needs non-negative integers, so convert -2...2 to 0..4
+    return (np.asarray(X) + 2).astype(int)
