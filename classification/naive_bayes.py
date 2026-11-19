@@ -73,18 +73,20 @@ assert not cna_disc.isna().any().any(), "CNA discrete has NaN"
 #check if cna discrete contains values -2, -1, 0, 1 and 2
 assert set(np.unique(cna_disc.to_numpy())) <= {-2, -1, 0, 1, 2}, "Unexpected CNA discrete values"
 
+#every patient must have a split assignment
+assert clinical["PATIENT_ID"].isin(split.index).all(), "Patients missing from the split"
 
 #we identify the training samples with their patient id
 is_train = clinical["PATIENT_ID"].map(split).eq("train").to_numpy()
 
-#separate labels: y_train = labels of train samples, y_t
+#separate labels
 y = clinical["SUBTYPE"] #y = subtype of each sample
 y_train, y_test = y[is_train], y[~is_train] #y_train = labels of train samples, y_test = same for test samples
 print(f"Train: {is_train.sum()} | Test: {(~is_train).sum()}")
 
 #RNA + CNA: we give the columns a prefix so they don't collide
 #and combine both dfs horizontally, so that we add cna columns to those of rna
-#this creates a third dataset dat contains both
+#this creates a third dataset that contains both
 rna_cna = pd.concat([
     rna.add_prefix("RNA_"), 
     cna_disc.add_prefix("CNA_")], 
@@ -161,7 +163,7 @@ combinations = {
         ("select", ColumnTransformer([
             ("rna", ZeroFractionFilter(threshold=0.95),
              [c for c in rna_cna if c.startswith("RNA_")]),
-            ("cna", "passthrough", #to not apply the rna filter to cna values
+            ("cna", ModalFrequencyFilter(threshold=0.95),
              [c for c in rna_cna if c.startswith("CNA_")]),
         ])),
         ("scale", StandardScaler()), #scale all
@@ -227,15 +229,18 @@ for comb, (X, pipe, suggest) in combinations.items():
 
     X_train, X_test = X[is_train], X[~is_train]
 
+    #call tune to optimize hyperparams + train the best model
     model, best_params, fold_scores, study = tune(
         pipe, suggest, X_train, y_train
     )
 
+    #best model trained with its params, scores...
     study.trials_dataframe().to_csv(
         RESULTS / f"naive_bayes_trials_{comb}.csv",
         index=False
     )
 
+    #store scores of each fold
     for i, s in enumerate(fold_scores):
         fold_rows.append({
             "scenario": comb,
@@ -244,10 +249,12 @@ for comb, (X, pipe, suggest) in combinations.items():
             "macro_f1": s
         })
 
+    #predict with test set
     pred = model.predict(X_test)
     prob = model.predict_proba(X_test)
     classes = model.classes_
 
+    #calculate the metrics
     row = {
         "scenario": comb,
         "model": "NaiveBayes",
