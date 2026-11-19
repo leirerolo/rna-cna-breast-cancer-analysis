@@ -1,2 +1,0 @@
-scenario,model,n_trials,best_params,test_macro_f1,test_mcc,test_accuracy,test_auc_ovr
-RNA+CNA,CART,0,"{'max_depth': 10, 'min_samples_split': 15, 'min_samples_leaf': 1, 'ccp_alpha': 0.019398197043239886}",0.8687305441846481,0.8247099808613274,0.8888888888888888,0.9438535473847226
