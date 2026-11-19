@@ -134,3 +134,160 @@ def suggest_categorical(trial):
 def shift_cna(X):
     #categoricalNB needs non-negative integers, so convert -2...2 to 0..4
     return (np.asarray(X) + 2).astype(int)
+
+
+# =============================================================================
+# COMBINATIONS
+# =============================================================================
+#for each combination (RNA, CNA or RNA+CNA), we define:
+#- the data to be used
+#- the preprocessing and classification pipeline
+#- the function optuna will use to find hyperparameters
+
+combinations = {
+    "RNA": (rna, Pipeline([
+        ("filter", ZeroFractionFilter(threshold=0.95)),
+        ("scale", StandardScaler()), #standardization so that scale differences don't affect the model
+        ("nb", GaussianNB()),
+    ]), suggest_gaussian), #optuna will optimize the hyperparams of that nb model
+
+    "CNA": (cna_disc, Pipeline([
+        ("filter", ModalFrequencyFilter(threshold=0.95)),
+        ("shift", FunctionTransformer(shift_cna)), #shift -2, -1, 0, 1, 2 values to 0,1,2,3,4
+        ("nb", CategoricalNB(min_categories=5)),
+    ]), suggest_categorical),
+
+    "RNA+CNA": (rna_cna, Pipeline([
+        ("select", ColumnTransformer([
+            ("rna", ZeroFractionFilter(threshold=0.95),
+             [c for c in rna_cna if c.startswith("RNA_")]),
+            ("cna", "passthrough", #to not apply the rna filter to cna values
+             [c for c in rna_cna if c.startswith("CNA_")]),
+        ])),
+        ("scale", StandardScaler()), #scale all
+        ("nb", GaussianNB()),
+    ]), suggest_gaussian)
+}
+
+
+# ====================================================================================
+# OPTUNA TUNING (cross-validation just in training samples)
+# ====================================================================================
+cv = StratifiedKFold(
+    n_splits=N_FOLDS,
+    shuffle=True, #mix data before dividing it
+    random_state=SEED
+)
+
+def tune(pipe, suggest, X_train, y_train):
+    #optuna maximizing mean macro-F1 over the folds
+    
+    def objective(trial):
+        params = suggest(trial) #suggest a hyperparam combination
+        model = clone(pipe).set_params(**params) #apply it
+
+        #evaluate the model
+        scores = cross_val_score(
+            model, X_train, y_train,
+            cv=cv,
+            scoring="f1_macro",
+            error_score="raise"
+        )
+
+        #store the individual scores of the 5 folds and return their mean
+        trial.set_user_attr("fold_scores", scores.tolist())
+        return scores.mean() # = score that optuna will try to maximize
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=SEED)
+    )
+    study.optimize(objective, n_trials=N_TRIALS) #30 trials, and in each, call objective() and store the score
+
+    #get the best model and train it
+    best_params = suggest(optuna.trial.FixedTrial(study.best_params))
+    best_model = clone(pipe).set_params(**best_params).fit(X_train, y_train)
+
+    return(
+        best_model,
+        study.best_params,
+        study.best_trial.user_attrs["fold_scores"],
+        study
+    )
+
+
+# ============================================================================================
+# TRAINING & FINAL EVALUATION 
+# ============================================================================================
+#final results of each comb & individual results of each fold
+rows, fold_rows = [], []
+
+for comb, (X, pipe, suggest) in combinations.items():
+    print(f"\n=== {comb} ===")
+
+    X_train, X_test = X[is_train], X[~is_train]
+
+    model, best_params, fold_scores, study = tune(
+        pipe, suggest, X_train, y_train
+    )
+
+    study.trials_dataframe().to_csv(
+        RESULTS / f"naive_bayes_trials_{comb}.csv",
+        index=False
+    )
+
+    for i, s in enumerate(fold_scores):
+        fold_rows.append({
+            "scenario": comb,
+            "model": "NaiveBayes",
+            "fold": i,
+            "macro_f1": s
+        })
+
+    pred = model.predict(X_test)
+    prob = model.predict_proba(X_test)
+    classes = model.classes_
+
+    row = {
+        "scenario": comb,
+        "model": "NaiveBayes",
+        "n_trials": N_TRIALS,
+        "best_params": str(best_params),
+        "cv_macro_f1_mean": float(np.mean(fold_scores)),
+        "cv_macro_f1_std": float(np.std(fold_scores)),
+        "test_macro_f1": f1_score(y_test, pred, average="macro"),
+        "test_mcc": matthews_corrcoef(y_test, pred),
+        "test_accuracy": accuracy_score(y_test, pred),
+        "test_auc_ovr": roc_auc_score(
+            y_test, prob, 
+            multi_class="ovr",
+            average="macro",
+            labels=classes
+        ),
+    }
+    rows.append(row)
+
+    print("Best params:", best_params)
+    print(
+        f"CV macro-F1: {row['cv_macro_f1_mean']:.3f} "
+        f"+/- {row['cv_macro_f1_std']:.3f}"
+    )
+    print(
+        f"TEST macro-F1: {row['test_macro_f1']:.3f} "
+        f"| MCC: {row['test_mcc']:.3f} "
+        f"| acc: {row['test_accuracy']:.3f} "
+        f"| AUC ovr: {row['test_auc_ovr']:.3f}"
+    )
+
+    print("Confusion matrix (rows = real, cols = predicted):", list(classes))
+    print(confusion_matrix(y_test, pred, labels=classes))
+
+pd.DataFrame(rows).to_csv(
+    RESULTS / "naive_bayes_results.csv",
+    index=False
+)
+pd.DataFrame(fold_rows).to_csv(
+    RESULTS / "naive_bayes_cv_folds.csv",
+    index=False
+)
+print(f"\nStored in {RESULTS}")
