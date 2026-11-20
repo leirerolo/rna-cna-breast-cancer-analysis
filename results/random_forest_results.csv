@@ -1,0 +1,4 @@
+scenario,model,n_trials,best_params,cv_macro_f1_mean,cv_macro_f1_std,test_macro_f1,test_mcc,test_accuracy,test_auc_ovr
+RNA,RandomForest,30,"{'n_estimators': 200, 'max_features': 'sqrt', 'max_depth': None, 'min_samples_split': 20, 'min_samples_leaf': 1}",0.850876639510209,0.01791847533815218,0.8067327095945698,0.7809504899681273,0.8624338624338624,0.9833194365341456
+CNA,RandomForest,30,"{'n_estimators': 100, 'max_features': 'sqrt', 'max_depth': None, 'min_samples_split': 4, 'min_samples_leaf': 1}",0.5439631920607979,0.029628511039708393,0.540660216136048,0.5393269262951634,0.7195767195767195,0.8680355499530763
+RNA+CNA,RandomForest,30,"{'n_estimators': 200, 'max_features': 'sqrt', 'max_depth': None, 'min_samples_split': 10, 'min_samples_leaf': 3}",0.8381657613932318,0.033444420449974366,0.8127055429631156,0.7976769503146021,0.873015873015873,0.9866391679697843

@@ -1,0 +1,5 @@
+,BRCA_Basal,BRCA_Her2,BRCA_LumA,BRCA_LumB
+BRCA_Basal,34,0,0,0
+BRCA_Her2,1,7,4,4
+BRCA_LumA,0,0,93,7
+BRCA_LumB,0,0,10,29

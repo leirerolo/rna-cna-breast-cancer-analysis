@@ -1,0 +1,6 @@
+{
+    "max_depth": 10,
+    "min_samples_split": 15,
+    "min_samples_leaf": 1,
+    "ccp_alpha": 0.019398197043239886
+}
