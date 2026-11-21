@@ -33,3 +33,7 @@ class ModalFrequencyFilter(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         return np.asarray(X)[:, self.mask_]
+
+def shift_cna(X):
+    """CategoricalNB needs non-negative integers: -2..2 -> 0..4."""
+    return (np.asarray(X) + 2).astype(int)

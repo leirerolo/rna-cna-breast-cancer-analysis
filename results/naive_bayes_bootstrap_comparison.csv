@@ -1,0 +1,3 @@
+model,comparison,n_test_patients,n_bootstrap,delta_macro_f1,ci_95_lower,ci_95_upper
+naive_bayes,RNA+CNA minus RNA,189,20000,-0.07369660862947525,-0.12643829691548397,-0.02890860928502938
+naive_bayes,RNA+CNA minus CNA,189,20000,0.24196205863181486,0.17227512730668773,0.30984373913007957

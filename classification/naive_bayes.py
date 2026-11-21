@@ -20,6 +20,7 @@ from pathlib import Path
 import sys
 import numpy as np
 import optuna
+import joblib
 import pandas as pd
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
@@ -33,7 +34,7 @@ from sklearn.preprocessing import FunctionTransformer, StandardScaler
 #we must import filters.py from the project
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT / "Preprocessing"))
-from filters import ModalFrequencyFilter, ZeroFractionFilter
+from filters import ModalFrequencyFilter, ZeroFractionFilter, shift_cna
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -44,6 +45,8 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 P = ROOT / "data" / "processed"
 RESULTS = ROOT / "results"
 RESULTS.mkdir(exist_ok=True)
+MODELS = ROOT / "models"
+MODELS.mkdir(exist_ok=True)
 
 SEED = 42
 N_FOLDS = 5 #we use 5-fold stratified cross-validation
@@ -130,12 +133,6 @@ def suggest_categorical(trial):
         "nb__alpha": alpha,
         "nb__fit_prior": fit_prior
     }
-
-
-#transform the cna discrete values so they are compatible with CategoricalNB
-def shift_cna(X):
-    #categoricalNB needs non-negative integers, so convert -2...2 to 0..4
-    return (np.asarray(X) + 2).astype(int)
 
 
 # =============================================================================
@@ -233,6 +230,9 @@ for comb, (X, pipe, suggest) in combinations.items():
     model, best_params, fold_scores, study = tune(
         pipe, suggest, X_train, y_train
     )
+
+    #save the trained model
+    joblib.dump(model, MODELS / f"naive_bayes_{comb.replace('+', '_')}.joblib")
 
     #best model trained with its params, scores...
     study.trials_dataframe().to_csv(
