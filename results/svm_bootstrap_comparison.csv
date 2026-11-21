@@ -1,0 +1,2 @@
+comparison,n_test_patients,n_bootstrap,delta_macro_f1,ci_95_lower,ci_95_upper
+RNA+CNA minus RNA,189,20000,-0.03311991494523614,-0.0785303569128164,0.00684606905569938

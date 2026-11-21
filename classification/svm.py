@@ -45,6 +45,8 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 P = ROOT / "data" / "processed"
 RESULTS = ROOT / "results"
 RESULTS.mkdir(exist_ok=True)
+MODELS = ROOT / "models"
+MODELS.mkdir(exist_ok=True)
 
 SEED = 42
 N_FOLDS = 5 #we use 5-fold stratified cross-validation
@@ -209,6 +211,11 @@ for comb, (X, pipe, suggest) in combinations.items():
     model, best_params, fold_scores, study = tune(
         pipe, suggest, X_train, y_train
     )
+
+    #save the trained model 
+    joblib.dump(model, MODELS / f"svm_{comb.replace('+', '_')}.joblib")
+
+    
     # checking nº of genes that survived the filter
     d = model[:-1].transform(X_train).shape[1]
     print(f"genes after the filter: {d} | 1/d = {1/d:.2e}")
