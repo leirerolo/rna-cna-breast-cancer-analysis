@@ -68,12 +68,16 @@ def load_regression_data(cna_kind="disc"):
 
     is_train = clinical["PATIENT_ID"].map(split).eq("train").to_numpy()
 
+    #patient ID of every sample, to keep the datasets' order
+    patient_ids = clinical["PATIENT_ID"]
+
     return {
         "datasets": {"RNA": rna, "CNA": cna, "RNA+CNA": rna_cna},
         "y": np.log1p(clinical[TARGET]),
         "tmb_raw": clinical[TARGET],
         "is_train": is_train,
         "subtype": clinical["SUBTYPE"],
+        "patient_ids": patient_ids,
     }
 
 
